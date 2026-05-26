@@ -1,0 +1,4 @@
+pydantic>=2.5.0
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+uvloop>=0.18.0; sys_platform != "win32"
