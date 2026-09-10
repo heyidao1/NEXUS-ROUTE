@@ -60,6 +60,23 @@ def base_domain(host):
     parts = normalize_host(host).split(".")
     return ".".join(parts[-2:]) if len(parts) >= 2 else host
 
+INTEREST_TOKENS = {
+    "api": 8, "auth": 9, "account": 9, "oauth": 10, "sso": 10,
+    "gateway": 8, "pay": 9, "payment": 10, "wallet": 9, "store": 6,
+    "member": 7, "user": 7, "admin": 8, "cloud": 6, "order": 7,
+    "trade": 7, "openapi": 8, "graphql": 8, "login": 8, "id": 5,
+}
+
+def host_interest_score(host):
+    labels = normalize_host(host).split(".")[:-2]
+    score = 0
+    for label in labels:
+        low = label.lower()
+        for token, weight in INTEREST_TOKENS.items():
+            if token in low:
+                score += weight
+    return score
+
 def safe_head(url, extra_headers=None, timeout=8):
     headers = {"User-Agent": UA, "Accept": "*/*", "Connection": "close"}
     if extra_headers:
@@ -279,6 +296,7 @@ def run_program(program):
         time.sleep(1.0)
 
     ordered = sorted(discovered)
+    priority_ordered = sorted(ordered, key=lambda h: (-host_interest_score(h), h))
     selected = []
     if ordered:
         window = min(40, len(ordered))
@@ -288,9 +306,21 @@ def run_program(program):
             cursors = json.loads(cursor_path.read_text(encoding="utf-8")) if cursor_path.exists() else {}
         except Exception:
             cursors = {}
-        start = int(cursors.get(program.get("id"), 0)) % len(ordered)
-        selected = (ordered[start:] + ordered[:start])[:window]
-        cursors[program.get("id")] = (start + window) % len(ordered)
+        pid = str(program.get("id"))
+        priority_pool = [h for h in priority_ordered if host_interest_score(h) > 0][:80]
+        priority_take = min(8, window, len(priority_pool))
+        pstart = int(cursors.get(pid + ":priority", 0)) % len(priority_pool) if priority_pool else 0
+        priority_rotated = priority_pool[pstart:] + priority_pool[:pstart]
+        priority_selected = priority_rotated[:priority_take]
+        if priority_pool:
+            cursors[pid + ":priority"] = (pstart + priority_take) % len(priority_pool)
+        coverage_pool = [h for h in ordered if h not in priority_selected]
+        remaining = window - len(priority_selected)
+        cstart = int(cursors.get(pid + ":coverage", 0)) % len(coverage_pool) if coverage_pool else 0
+        coverage_rotated = coverage_pool[cstart:] + coverage_pool[:cstart]
+        selected = priority_selected + coverage_rotated[:remaining]
+        if coverage_pool:
+            cursors[pid + ":coverage"] = (cstart + remaining) % len(coverage_pool)
         cursor_path.write_text(json.dumps(cursors, ensure_ascii=False, indent=2), encoding="utf-8")
     for host in selected:
         snap = dns_snapshot(host)
@@ -342,6 +372,7 @@ def run_program(program):
         "rules_source": program.get("rules_source"),
         "passive_discovered_count": len(discovered),
         "passive_discovered_sample": sorted(discovered)[:500],
+        "priority_discovered_sample": priority_ordered[:100],
         "dns_checked_count": len(dns_results),
         "dns_results": dns_results,
         "direct_requests_used": budget["used"],
