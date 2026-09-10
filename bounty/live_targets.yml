@@ -6,8 +6,8 @@ programs:
   program_name: OPPO安全应急响应中心
   rules_source: https://osrc.vulbox.com/home
   official_submit: https://security.oppo.com/cn/add
-  automation_mode: low_impact_read_only
-  max_requests_per_run: 36
+  automation_mode: passive_only
+  max_requests_per_run: 0
   delay_seconds: 2.0
   active_seed_hosts:
   - www.oppo.com
@@ -27,6 +27,7 @@ programs:
     - '*.realme.com'
     - '*.realme.net'
   forbidden:
+  - automated_scanning
   - state_changing_requests
   - credential_attacks
   - brute_force
@@ -39,8 +40,8 @@ programs:
   - oppo.com
   - heytap.com
   - coloros.com
-  probe_discovered_roots: true
-  max_discovered_active_hosts: 8
+  probe_discovered_roots: false
+  max_discovered_active_hosts: 0
 - id: butian-kkidc
   platform: butian
   program_name: 厦门快快网络科技有限公司
