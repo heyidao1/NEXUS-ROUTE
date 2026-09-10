@@ -39,6 +39,8 @@ programs:
   - oppo.com
   - heytap.com
   - coloros.com
+  probe_discovered_roots: true
+  max_discovered_active_hosts: 8
 - id: butian-kkidc
   platform: butian
   program_name: 厦门快快网络科技有限公司
