@@ -282,13 +282,23 @@ def run_program(program):
     selected = []
     if ordered:
         window = min(40, len(ordered))
-        slot = int(time.time() // (6 * 3600))
-        start = (slot * window) % len(ordered)
+        root = Path(__file__).resolve().parents[1]
+        cursor_path = root / "state" / "dns_cursor.json"
+        try:
+            cursors = json.loads(cursor_path.read_text(encoding="utf-8")) if cursor_path.exists() else {}
+        except Exception:
+            cursors = {}
+        start = int(cursors.get(program.get("id"), 0)) % len(ordered)
         selected = (ordered[start:] + ordered[:start])[:window]
+        cursors[program.get("id")] = (start + window) % len(ordered)
+        cursor_path.write_text(json.dumps(cursors, ensure_ascii=False, indent=2), encoding="utf-8")
     for host in selected:
         snap = dns_snapshot(host)
         dns_results.append(snap)
-        if snap.get("dangling_cname"):
+        external_dangling = snap.get("dangling_cname") and any(
+            not host_in_scope(target, patterns) for target in snap.get("cname", [])
+        )
+        if external_dangling:
             findings.append({
                 "kind": "possible-dangling-cname",
                 "host": host,
@@ -331,7 +341,7 @@ def run_program(program):
         "automation_mode": mode,
         "rules_source": program.get("rules_source"),
         "passive_discovered_count": len(discovered),
-        "passive_discovered_sample": sorted(discovered)[:100],
+        "passive_discovered_sample": sorted(discovered)[:500],
         "dns_checked_count": len(dns_results),
         "dns_results": dns_results,
         "direct_requests_used": budget["used"],
