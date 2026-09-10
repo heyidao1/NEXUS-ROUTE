@@ -20,7 +20,11 @@ SECRET_PATTERNS = {
     "google-api-key": re.compile(r"AIza[0-9A-Za-z_-]{35}"),
     "stripe-live-secret": re.compile(r"sk_live_[0-9A-Za-z]{20,}"),
     "github-token": re.compile(r"gh[pousr]_[A-Za-z0-9_]{30,}"),
-    "private-key-marker": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+    "private-key-pem": re.compile(
+        r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
+        r"[\r\nA-Za-z0-9+/=]{128,8192}"
+        r"-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
+    ),
 }
 API_PATH = re.compile(r"[\"'](/(?:api|v\d+|graphql|oauth|auth)/[^\"'\\\s]{1,180})[\"']")
 SOURCE_MAP = re.compile(r"sourceMappingURL=([^\s*]+)")
@@ -116,7 +120,6 @@ def choose_hosts(root, program):
                             pass
                     if public:
                         source_hosts.append(x.get("host", ""))
-                source_hosts += item.get("passive_discovered_sample", [])
                 for host in source_hosts:
                     host = host.strip().lower().rstrip('.')
                     if host and host not in seeds and host not in pool:

@@ -1,5 +1,6 @@
 import argparse
 import hashlib
+import ipaddress
 import json
 import shutil
 import socket
@@ -133,6 +134,13 @@ def dns_snapshot(host):
         if a_status == 3 and aaaa_status == 3 and not has_addr:
             result["dangling_cname"] = True
     return result
+
+
+def _is_global_ip(value):
+    try:
+        return ipaddress.ip_address(value).is_global
+    except ValueError:
+        return False
 
 
 def limited_headers(headers):
@@ -304,7 +312,12 @@ def run_program(program):
             findings.extend(new_findings)
         if program.get("probe_discovered_roots", False):
             limit = int(program.get("max_discovered_active_hosts", 0))
-            for host in [x for x in selected if x not in curated][:limit]:
+            public_live = []
+            for snap in dns_results:
+                addresses = list(snap.get("a", [])) + list(snap.get("aaaa", []))
+                if any(_is_global_ip(x) for x in addresses):
+                    public_live.append(snap.get("host", ""))
+            for host in [x for x in public_live if x and x not in curated][:limit]:
                 if budget["remaining"] < 2:
                     break
                 probe, new_findings = probe_discovered_root(host, program, budget)
