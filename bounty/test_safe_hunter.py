@@ -47,3 +47,21 @@ def test_active_mode_only_probes_curated_seed_hosts(monkeypatch):
         "scope": {"include": ["*.example.com"]},
     })
     assert seen == ["www.example.com"]
+
+def test_discovered_root_probe_is_opt_in_and_limited(monkeypatch):
+    seen = []
+    monkeypatch.setattr(safe_hunter, "crtsh_names", lambda domain: [f"h{i}.example.com" for i in range(12)])
+    monkeypatch.setattr(safe_hunter, "subfinder_names", lambda domain: [])
+    monkeypatch.setattr(safe_hunter.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(safe_hunter, "dns_snapshot", lambda host: {"host": host, "a": [], "aaaa": [], "cname": [], "dangling_cname": False})
+    monkeypatch.setattr(safe_hunter, "probe_host", lambda host, program, budget: ({"host": host}, []))
+    monkeypatch.setattr(safe_hunter, "probe_discovered_root", lambda host, program, budget: (seen.append(host) or ({"host": host}, [])))
+    safe_hunter.run_program({
+        "id": "bounded-test", "program_name": "bounded", "platform": "test",
+        "automation_mode": "low_impact_read_only", "max_requests_per_run": 20,
+        "passive_seed_domains": ["example.com"], "active_seed_hosts": ["www.example.com"],
+        "probe_discovered_roots": True, "max_discovered_active_hosts": 3,
+        "scope": {"include": ["*.example.com"]},
+    })
+    assert len(seen) == 3
+    assert "www.example.com" not in seen
