@@ -65,6 +65,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
+      - name: Summarize scanner output
+        run: python bounty/summarize_scans.py artifacts
+
       - name: Upload scan artifacts
         uses: actions/upload-artifact@v4
         with:
