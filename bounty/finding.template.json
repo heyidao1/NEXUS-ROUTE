@@ -1,0 +1,27 @@
+{
+  "platform": "butian-or-vulbox",
+  "program_id": "REPLACE_WITH_PROGRAM_ID",
+  "target": "https://in-scope.example.com",
+  "title": "Short vulnerability title",
+  "vulnerability_type": "REPLACE_WITH_TYPE",
+  "summary": "Concise technical summary.",
+  "impact": "Explain concrete security impact without exaggeration.",
+  "reproduction_steps": [
+    "Step 1",
+    "Step 2"
+  ],
+  "evidence": [
+    "Evidence reference or sanitized artifact path"
+  ],
+  "scope_proof": "Quote or reference the official scope entry that covers this target.",
+  "rules_checked_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "remediation": "Suggested remediation.",
+  "reproducible": false,
+  "clear_security_impact": false,
+  "in_scope": false,
+  "evidence_complete": false,
+  "duplicate_check_complete": false,
+  "human_verified": false,
+  "destructive_test": false,
+  "out_of_scope": false
+}
