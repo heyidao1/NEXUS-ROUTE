@@ -108,21 +108,30 @@ def subfinder_names(domain, timeout=90):
     return sorted(names)
 
 
+def doh_answers(host, rtype):
+    url = "https://dns.google/resolve?" + parse.urlencode({"name": host, "type": rtype})
+    req = request.Request(url, headers={"User-Agent": UA, "Accept": "application/dns-json"})
+    try:
+        with request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read(200_000).decode("utf-8", "replace"))
+    except Exception:
+        return None, []
+    return data.get("Status"), data.get("Answer") or []
+
+
 def dns_snapshot(host):
-    result = {"host": host, "a": [], "aaaa": [], "cname": [], "dangling_cname": False}
-    for rtype, key in (("A", "a"), ("AAAA", "aaaa"), ("CNAME", "cname")):
-        try:
-            ans = dns.resolver.resolve(host, rtype, lifetime=5)
-            result[key] = sorted({str(x).rstrip(".") for x in ans})
-        except Exception:
-            pass
+    result = {"host": host, "a": [], "aaaa": [], "cname": [], "dangling_cname": False, "resolver": "dns.google-doh"}
+    for rtype, code, key in (("A", 1, "a"), ("AAAA", 28, "aaaa"), ("CNAME", 5, "cname")):
+        status, answers = doh_answers(host, rtype)
+        if status is None:
+            continue
+        result[key] = sorted({str(x.get("data", "")).rstrip(".") for x in answers if x.get("type") == code and x.get("data")})
     for target in result["cname"]:
-        try:
-            dns.resolver.resolve(target, "A", lifetime=5)
-        except dns.resolver.NXDOMAIN:
+        a_status, a_answers = doh_answers(target, "A")
+        aaaa_status, aaaa_answers = doh_answers(target, "AAAA")
+        has_addr = any(x.get("type") in {1, 28} for x in (a_answers or []) + (aaaa_answers or []))
+        if a_status == 3 and aaaa_status == 3 and not has_addr:
             result["dangling_cname"] = True
-        except Exception:
-            pass
     return result
 
 
@@ -151,7 +160,7 @@ def probe_discovered_root(host, program, budget):
     findings = []
     acao = cors_headers.get("Access-Control-Allow-Origin", "")
     acac = cors_headers.get("Access-Control-Allow-Credentials", "").lower()
-    if cors_status and acao == ATTACKER_ORIGIN and acac == "true":
+    if cors_status == 200 and acao == ATTACKER_ORIGIN and acac == "true" and "json" in cors_headers.get("Content-Type", "").lower():
         findings.append({"kind": "cors-reflection-with-credentials", "host": host,
                          "url": base + "/", "confidence": "medium",
                          "safe_evidence": {"acao": acao, "acac": acac},
@@ -189,7 +198,7 @@ def probe_host(host, program, budget):
     cors_status, cors_headers, _ = do_head(base + "/", {"Origin": ATTACKER_ORIGIN})
     acao = cors_headers.get("Access-Control-Allow-Origin", "")
     acac = cors_headers.get("Access-Control-Allow-Credentials", "").lower()
-    if cors_status and acao == ATTACKER_ORIGIN and acac == "true":
+    if cors_status == 200 and acao == ATTACKER_ORIGIN and acac == "true" and "json" in cors_headers.get("Content-Type", "").lower():
         findings.append({
             "kind": "cors-reflection-with-credentials",
             "host": host,

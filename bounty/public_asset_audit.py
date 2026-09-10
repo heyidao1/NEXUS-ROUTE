@@ -1,6 +1,8 @@
 import hashlib
+import ipaddress
 import json
 import re
+import time
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib import parse, request, error
@@ -11,7 +13,7 @@ UA = "AuthorizedBugBountyPublicAssetAudit/1.0"
 MAX_HTML = 350_000
 MAX_JS = 800_000
 MAX_HOSTS = 5
-MAX_SCRIPTS_PER_HOST = 8
+MAX_SCRIPTS_PER_HOST = 4
 
 SECRET_PATTERNS = {
     "aws-access-key-id": re.compile(r"(?:AKIA|ASIA)[A-Z0-9]{16}"),
@@ -92,18 +94,46 @@ def save_candidate(root, program, finding):
 
 
 def choose_hosts(root, program):
-    hosts = list(program.get("active_seed_hosts", []))
+    seeds = []
+    for host in program.get("active_seed_hosts", []):
+        host = host.strip().lower().rstrip('.')
+        if host and host not in seeds:
+            seeds.append(host)
+    pool = []
     latest = root / "state" / "latest.json"
     if latest.exists():
         data = json.loads(latest.read_text(encoding="utf-8"))
         for item in data.get("programs", []):
             if item.get("program_id") == program.get("id"):
-                hosts.extend(item.get("passive_discovered_sample", []))
-    seen = []
-    for host in hosts:
-        host = host.strip().lower().rstrip('.')
-        if host and host not in seen: seen.append(host)
-    return seen[:MAX_HOSTS]
+                source_hosts = []
+                for x in item.get("dns_results", []):
+                    addresses = list(x.get("a", [])) + list(x.get("aaaa", []))
+                    public = False
+                    for addr in addresses:
+                        try:
+                            public = public or ipaddress.ip_address(addr).is_global
+                        except ValueError:
+                            pass
+                    if public:
+                        source_hosts.append(x.get("host", ""))
+                source_hosts += item.get("passive_discovered_sample", [])
+                for host in source_hosts:
+                    host = host.strip().lower().rstrip('.')
+                    if host and host not in seeds and host not in pool:
+                        pool.append(host)
+    cursor_path = root / "state" / "public_asset_cursor.json"
+    try:
+        cursors = json.loads(cursor_path.read_text(encoding="utf-8")) if cursor_path.exists() else {}
+    except Exception:
+        cursors = {}
+    slots = max(0, MAX_HOSTS - len(seeds[:MAX_HOSTS]))
+    offset = int(cursors.get(program.get("id"), 0)) % len(pool) if pool else 0
+    rotated = pool[offset:] + pool[:offset]
+    chosen = seeds[:MAX_HOSTS] + rotated[:slots]
+    if pool and slots:
+        cursors[program.get("id")] = (offset + slots) % len(pool)
+        cursor_path.write_text(json.dumps(cursors, ensure_ascii=False, indent=2), encoding="utf-8")
+    return chosen[:MAX_HOSTS]
 
 def audit_host(root, program, host, endpoints):
     base = f"https://{host}/"
@@ -123,6 +153,7 @@ def audit_host(root, program, host, endpoints):
         if url and url not in scripts: scripts.append(url)
     findings = 0
     for js_url in scripts[:MAX_SCRIPTS_PER_HOST]:
+        time.sleep(float(program.get('delay_seconds', 2.0)))
         js_status, js_headers, js_body, js_final = fetch_limited(js_url, MAX_JS)
         if js_status not in {200, 206} or not js_body: continue
         js = js_body.decode("utf-8", "replace")
@@ -171,3 +202,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
