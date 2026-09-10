@@ -53,7 +53,7 @@ def test_discovered_root_probe_is_opt_in_and_limited(monkeypatch):
     monkeypatch.setattr(safe_hunter, "crtsh_names", lambda domain: [f"h{i}.example.com" for i in range(12)])
     monkeypatch.setattr(safe_hunter, "subfinder_names", lambda domain: [])
     monkeypatch.setattr(safe_hunter.time, "sleep", lambda *_: None)
-    monkeypatch.setattr(safe_hunter, "dns_snapshot", lambda host: {"host": host, "a": [], "aaaa": [], "cname": [], "dangling_cname": False})
+    monkeypatch.setattr(safe_hunter, "dns_snapshot", lambda host: {"host": host, "a": ["8.8.8.8"], "aaaa": [], "cname": [], "dangling_cname": False})
     monkeypatch.setattr(safe_hunter, "probe_host", lambda host, program, budget: ({"host": host}, []))
     monkeypatch.setattr(safe_hunter, "probe_discovered_root", lambda host, program, budget: (seen.append(host) or ({"host": host}, [])))
     safe_hunter.run_program({
