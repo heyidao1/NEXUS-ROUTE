@@ -16,6 +16,8 @@ try {
   Set-Location $root
   $env:PYTHONUTF8 = '1'
   python .\bounty\safe_hunter.py *>&1 | Tee-Object -FilePath $log
+  python .\bounty\public_asset_audit.py *>&1 | Tee-Object -FilePath $log -Append
+  python .\bounty\endpoint_audit.py *>&1 | Tee-Object -FilePath $log -Append
   python .\bounty\triage_queue.py *>&1 | Tee-Object -FilePath $log -Append
   Get-Date -Format o | Set-Content -Encoding UTF8 (Join-Path $state 'last-success.txt')
 } catch {
