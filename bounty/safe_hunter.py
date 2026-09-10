@@ -135,6 +135,31 @@ def limited_headers(headers):
     ]
     lowered = {k.lower(): v for k, v in headers.items()}
     return {k: lowered[k] for k in keep if k in lowered}
+def probe_discovered_root(host, program, budget):
+    patterns = program.get("scope", {}).get("include", [])
+    if not host_in_scope(host, patterns):
+        return {"host": host, "blocked": "out_of_scope"}, []
+    if budget["remaining"] < 2:
+        return {"host": host, "blocked": "request_budget"}, []
+    delay = float(program.get("delay_seconds", 2.0))
+    base = "https://" + host
+    budget["remaining"] -= 1; budget["used"] += 1
+    status, headers, err = safe_head(base + "/")
+    time.sleep(delay)
+    budget["remaining"] -= 1; budget["used"] += 1
+    cors_status, cors_headers, cors_err = safe_head(base + "/", {"Origin": ATTACKER_ORIGIN})
+    findings = []
+    acao = cors_headers.get("Access-Control-Allow-Origin", "")
+    acac = cors_headers.get("Access-Control-Allow-Credentials", "").lower()
+    if cors_status and acao == ATTACKER_ORIGIN and acac == "true":
+        findings.append({"kind": "cors-reflection-with-credentials", "host": host,
+                         "url": base + "/", "confidence": "medium",
+                         "safe_evidence": {"acao": acao, "acac": acac},
+                         "manual_verification_required": True})
+    return {"host": host, "reachable": status is not None, "base": base,
+            "root_status": status, "root_error": err, "cors_error": cors_err}, findings
+
+
 def probe_host(host, program, budget):
     patterns = program.get("scope", {}).get("include", [])
     if not host_in_scope(host, patterns):
@@ -261,12 +286,21 @@ def run_program(program):
         "used": 0,
     }
     if mode == "low_impact_read_only":
+        curated = {normalize_host(x) for x in program.get("active_seed_hosts", [])}
         for host in program.get("active_seed_hosts", []):
             if budget["remaining"] <= 0:
                 break
             probe, new_findings = probe_host(normalize_host(host), program, budget)
             probes.append(probe)
             findings.extend(new_findings)
+        if program.get("probe_discovered_roots", False):
+            limit = int(program.get("max_discovered_active_hosts", 0))
+            for host in [x for x in selected if x not in curated][:limit]:
+                if budget["remaining"] < 2:
+                    break
+                probe, new_findings = probe_discovered_root(host, program, budget)
+                probes.append(probe)
+                findings.extend(new_findings)
 
     return {
         "program_id": program.get("id"),
