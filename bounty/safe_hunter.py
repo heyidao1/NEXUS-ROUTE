@@ -302,6 +302,7 @@ def run_program(program):
         window = min(40, len(ordered))
         root = Path(__file__).resolve().parents[1]
         cursor_path = root / "state" / "dns_cursor.json"
+        cursor_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             cursors = json.loads(cursor_path.read_text(encoding="utf-8")) if cursor_path.exists() else {}
         except Exception:
