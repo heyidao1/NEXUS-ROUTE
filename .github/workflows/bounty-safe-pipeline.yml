@@ -1,0 +1,102 @@
+name: Bounty Safe Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      program_id:
+        description: "Configured program id from bounty/programs.yml"
+        required: false
+        type: string
+      target:
+        description: "Target to scope-check only; no external scan is run"
+        required: false
+        type: string
+      finding_json:
+        description: "Repo path to a finding JSON for final report gating"
+        required: false
+        type: string
+  pull_request:
+  push:
+    branches:
+      - bounty-safe-pipeline
+
+permissions:
+  contents: read
+
+jobs:
+  repository-security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python scanners
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r bounty/requirements.txt semgrep
+
+      - name: Run Semgrep
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts
+          semgrep scan --config auto --json --output artifacts/semgrep.json .
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: json
+          output: artifacts/trivy.json
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: "0"
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Upload scan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-artifacts
+          path: artifacts/
+          if-no-files-found: warn
+
+  submission-gate:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.finding_json != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install gate dependencies
+        run: pip install -r bounty/requirements.txt
+
+      - name: Verify target scope
+        if: ${{ inputs.program_id != '' && inputs.target != '' }}
+        run: python bounty/scope_guard.py --program "${{ inputs.program_id }}" --target "${{ inputs.target }}"
+
+      - name: Score candidate conservatively
+        run: python bounty/risk_score.py "${{ inputs.finding_json }}"
+
+      - name: Enforce final report gate
+        run: python bounty/report_gate.py "${{ inputs.finding_json }}"
+
+      - name: Render report for human submission
+        run: python bounty/render_report.py "${{ inputs.finding_json }}" bounty/final-report.md
+
+      - name: Upload final report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gated-bounty-report
+          path: bounty/final-report.md
