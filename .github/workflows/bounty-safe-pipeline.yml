@@ -40,6 +40,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r bounty/requirements.txt semgrep
 
+      - name: Test safety gates
+        run: pytest -q bounty/test_pipeline.py
+
       - name: Run Semgrep
         continue-on-error: true
         run: |
