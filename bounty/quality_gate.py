@@ -1,3 +1,14 @@
+def _independent_artifact_count(artifacts):
+    keys = set()
+    for artifact in artifacts:
+        group = str(artifact.get("evidence_group") or "").strip()
+        source = str(artifact.get("source_url") or "").strip()
+        digest = str(artifact.get("sha256") or "").strip()
+        key = ("group", group) if group else (("source", source) if source else ("sha256", digest))
+        keys.add(key)
+    return len(keys)
+
+
 def evaluate(report: dict, manifest: dict) -> dict:
     blockers = []
     reasons = []
@@ -24,21 +35,25 @@ def evaluate(report: dict, manifest: dict) -> dict:
         blockers.append("candidate not reproducible")
 
     artifacts = [a for a in (manifest or {}).get("artifacts", []) if not a.get("sensitive")]
+    independent = _independent_artifact_count(artifacts)
     if not artifacts:
         blockers.append("evidence artifacts missing")
-    elif len(artifacts) == 1:
+    elif independent == 1:
         score += 12
-        reasons.append("single evidence artifact")
+        reasons.append("single independent evidence source")
     else:
         score += 25
 
+    inference_only = False
     if not report.get("impact_fact"):
         blockers.append("impact fact missing")
     elif report.get("impact_demonstrated") is True:
         score += 20
     elif report.get("impact_inference"):
         score += 8
+        inference_only = True
         reasons.append("security impact is inferred, not directly demonstrated")
+        reasons.append("impact is inference-only")
     else:
         score += 4
         reasons.append("impact statement lacks demonstrated consequence")
@@ -56,6 +71,8 @@ def evaluate(report: dict, manifest: dict) -> dict:
 
     if blockers:
         verdict = "HOLD"
+    elif inference_only:
+        verdict = "REVIEW"
     elif score >= 85:
         verdict = "REPORT_READY"
     else:
