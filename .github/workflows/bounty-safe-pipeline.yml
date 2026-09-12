@@ -1,0 +1,117 @@
+name: Bounty Safe Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      program_id:
+        description: "Configured program id from bounty/programs.yml"
+        required: false
+        type: string
+      target:
+        description: "Target to scope-check only; no external scan is run"
+        required: false
+        type: string
+      finding_json:
+        description: "Repo path to a finding JSON for final report gating"
+        required: false
+        type: string
+      evidence_manifest:
+        description: "Repo path to evidence manifest JSON for v3 quality gating"
+        required: false
+        type: string
+  pull_request:
+  push:
+    branches:
+      - bounty-safe-pipeline
+
+permissions:
+  contents: read
+
+jobs:
+  repository-security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python scanners
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r bounty/requirements.txt semgrep
+
+      - name: Test safety gates
+        run: pytest -q bounty/test_pipeline.py bounty/test_safe_hunter.py bounty/test_pipeline_v3.py bounty/test_runner_v3.py bounty/test_candidate_migration_v3.py
+
+      - name: Run Semgrep
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts
+          semgrep scan --config auto --json --output artifacts/semgrep.json .
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: json
+          output: artifacts/trivy.json
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: "0"
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Summarize scanner output
+        run: python bounty/summarize_scans.py artifacts
+
+      - name: Upload scan artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: security-scan-artifacts
+          path: artifacts/
+          if-no-files-found: warn
+
+  submission-gate:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.finding_json != '' && inputs.evidence_manifest != '' }}
+    runs-on: ubuntu-latest
+    env:
+      PROGRAM_ID: ${{ inputs.program_id }}
+      TARGET: ${{ inputs.target }}
+      FINDING_JSON: ${{ inputs.finding_json }}
+      EVIDENCE_MANIFEST: ${{ inputs.evidence_manifest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install gate dependencies
+        run: pip install -r bounty/requirements.txt
+
+      - name: Verify target scope
+        if: ${{ inputs.program_id != '' && inputs.target != '' }}
+        run: python bounty/scope_guard.py --program "$PROGRAM_ID" --target "$TARGET"
+
+      - name: Score candidate with evidence gate
+        run: python bounty/risk_score_v3.py "$FINDING_JSON" "$EVIDENCE_MANIFEST"
+
+      - name: Enforce v3 report gate
+        run: python bounty/report_gate_v3.py "$FINDING_JSON" "$EVIDENCE_MANIFEST"
+
+      - name: Render report for human submission
+        run: python bounty/render_report.py "$FINDING_JSON" bounty/final-report.md
+
+      - name: Upload final report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gated-bounty-report
+          path: bounty/final-report.md

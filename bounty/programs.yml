@@ -1,0 +1,20 @@
+programs:
+  - id: butian-example
+    platform: butian
+    program_name: REPLACE_WITH_OFFICIAL_PROGRAM_NAME
+    rules_url: REPLACE_WITH_OFFICIAL_RULES_URL
+    automation_allowed: false
+    scope:
+      include: []
+      exclude: []
+    last_verified: null
+
+  - id: vulbox-example
+    platform: vulbox
+    program_name: REPLACE_WITH_OFFICIAL_PROGRAM_NAME
+    rules_url: REPLACE_WITH_OFFICIAL_RULES_URL
+    automation_allowed: false
+    scope:
+      include: []
+      exclude: []
+    last_verified: null

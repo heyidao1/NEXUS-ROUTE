@@ -1,0 +1,61 @@
+version: 1
+verified_at: '2026-09-10T20:22:59+08:00'
+programs:
+- id: vulbox-oppo
+  platform: vulbox
+  program_name: OPPO安全应急响应中心
+  rules_source: https://security.oppo.com/cn/responsibleDisclosure
+  official_submit: https://security.oppo.com/cn/add
+  automation_mode: low_impact_read_only
+  max_requests_per_run: 36
+  delay_seconds: 2.0
+  active_seed_hosts:
+  - www.oppo.com
+  scope:
+    include:
+    - '*.oppo.com'
+    - '*.oppo.cn'
+    - '*.myoppo.com'
+    - '*.opposhop.cn'
+    - '*.coloros.com'
+    - '*.nearme.com'
+    - '*.oppomobile.com'
+    - '*.oppofind.com'
+    - '*.myoas.com'
+    - '*.heytap.com'
+    - '*.heytapmobi.com'
+  forbidden:
+  - bulk_automated_scanning
+  - state_changing_requests
+  - credential_attacks
+  - brute_force
+  - denial_of_service
+  - data_exfiltration
+  - file_upload
+  - command_execution
+  - destructive_validation
+  passive_seed_domains:
+  - oppo.com
+  - heytap.com
+  - coloros.com
+  probe_discovered_roots: true
+  max_discovered_active_hosts: 8
+- id: butian-kkidc
+  platform: butian
+  program_name: 厦门快快网络科技有限公司
+  rules_source: https://www.butian.net/Loo/submit?cid=65359
+  automation_mode: passive_only
+  active_seed_hosts: []
+  passive_seed_domains:
+  - kkidc.com
+  scope:
+    include:
+    - www.kkidc.com
+  forbidden:
+  - direct_automated_scanning
+  - state_changing_requests
+  - credential_attacks
+  - denial_of_service
+  - data_exfiltration
+  - destructive_validation
+  max_requests_per_run: 0
