@@ -1,3 +1,18 @@
+def _legacy_review(previous):
+    review = previous.get("review")
+    if isinstance(review, dict):
+        return dict(review)
+    status = str(previous.get("review_status") or "")
+    if status.startswith("rejected"):
+        return {
+            "decision": "rejected",
+            "verified_at": previous.get("verified_at"),
+            "notes": previous.get("rejection_reason") or status,
+            "migrated_from": status,
+        }
+    return None
+
+
 def merge_candidate(previous: dict, observation: dict, metadata: dict) -> dict:
     previous = previous or {}
     observation = dict(observation or {})
@@ -23,6 +38,7 @@ def merge_candidate(previous: dict, observation: dict, metadata: dict) -> dict:
         "out_of_scope": False,
         "state": "DISCOVERED",
     }
-    if isinstance(previous.get("review"), dict):
-        record["review"] = dict(previous["review"])
+    review = _legacy_review(previous)
+    if review:
+        record["review"] = review
     return record
