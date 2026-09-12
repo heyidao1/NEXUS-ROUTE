@@ -17,20 +17,24 @@ def build_pack(candidate_json, report_json, artifact_paths, out_zip):
     artifacts = []
     source_paths = []
     for item in artifact_paths:
-        if isinstance(item, dict):
-            if item.get("sensitive"):
-                raise ValueError("sensitive artifacts cannot be packed")
-            p = Path(item["path"])
-        else:
-            p = Path(item)
+        meta = dict(item) if isinstance(item, dict) else {}
+        if meta.get("sensitive"):
+            raise ValueError("sensitive artifacts cannot be packed")
+        p = Path(meta.get("path") if meta else item)
         data = p.read_bytes()
         arc = f"evidence/{p.name}"
-        artifacts.append({
+        artifact = {
             "path": arc,
             "size": len(data),
             "sha256": hashlib.sha256(data).hexdigest(),
             "sensitive": False,
-        })
+        }
+        for key in ("source_url", "captured_at", "http_status", "method", "evidence_group"):
+            if meta.get(key) is not None:
+                artifact[key] = meta[key]
+        if "method" in artifact:
+            artifact["method"] = str(artifact["method"]).upper()
+        artifacts.append(artifact)
         source_paths.append((arc, p))
 
     manifest = {
