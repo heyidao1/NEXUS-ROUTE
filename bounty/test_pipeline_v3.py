@@ -45,9 +45,26 @@ def test_quality_gate_blocks_flags_without_artifacts():
     assert "evidence artifacts missing" in result["blockers"]
 
 
-def test_inference_only_impact_is_not_report_ready():
-    manifest = {"artifacts": [{"sha256": "a" * 64, "source_url": "https://e", "sensitive": False}]}
-    assert evaluate(_base_report(), manifest)["verdict"] == "REVIEW"
+def test_inference_only_impact_never_auto_promotes():
+    manifest = {"artifacts": [
+        {"sha256": "a" * 64, "source_url": "https://e/a", "sensitive": False},
+        {"sha256": "b" * 64, "source_url": "https://e/b", "sensitive": False},
+    ]}
+    result = evaluate(_base_report(), manifest)
+    assert result["score"] >= 85
+    assert result["verdict"] == "REVIEW"
+    assert "impact is inference-only" in result["reasons"]
+
+
+def test_same_source_files_count_as_one_evidence_source():
+    report = _base_report(); report["impact_demonstrated"] = True
+    manifest = {"artifacts": [
+        {"sha256": "a" * 64, "source_url": "https://e/app.js", "sensitive": False},
+        {"sha256": "b" * 64, "source_url": "https://e/app.js", "sensitive": False},
+    ]}
+    result = evaluate(report, manifest)
+    assert result["score"] == 87
+    assert "single independent evidence source" in result["reasons"]
 
 
 def test_demonstrated_impact_can_reach_report_ready():
@@ -79,13 +96,20 @@ def test_triage_ignores_legacy_human_verified(tmp_path):
     assert load_candidates(tmp_path)[0]["pending"] is True
 
 
-def test_evidence_pack_has_required_files(tmp_path):
+def test_evidence_pack_has_required_files_and_provenance(tmp_path):
     c = tmp_path / "candidate.json"; c.write_text(json.dumps({"candidate_id": "c1"}))
     r = tmp_path / "report.json"; r.write_text(json.dumps({"title": "Issue", "summary": "Summary"}))
     e = tmp_path / "evidence.txt"; e.write_text("proof")
-    out = tmp_path / "pack.zip"; build_pack(c, r, [e], out)
+    out = tmp_path / "pack.zip"
+    build_pack(c, r, [{
+        "path": e, "source_url": "https://e/source", "captured_at": "2026-09-12T00:00:00Z",
+        "http_status": 200, "method": "GET", "evidence_group": "source-a", "sensitive": False,
+    }], out)
     with zipfile.ZipFile(out) as z:
         assert {"manifest.json", "report.md", "README.txt", "evidence/evidence.txt"} <= set(z.namelist())
+        artifact = json.loads(z.read("manifest.json"))["artifacts"][0]
+        assert artifact["source_url"] == "https://e/source"
+        assert artifact["evidence_group"] == "source-a"
 
 
 def test_oppo_form_detects_duplicate_body():
