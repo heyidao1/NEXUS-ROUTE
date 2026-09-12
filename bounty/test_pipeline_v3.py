@@ -1,5 +1,6 @@
 import json
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -117,6 +118,15 @@ def test_oppo_form_detects_duplicate_body():
     expected = expected_form_snapshot(report, {"name": "e.zip", "size": 100})
     observed = dict(expected, editor_text=report["body"] * 2)
     assert "editor hash mismatch" in validate_live_snapshot(expected, observed)
+
+
+def test_oppo_snapshot_transport_is_read_only():
+    path = Path(__file__).with_name("platforms") / "oppo_snapshot.mjs"
+    text = path.read_text(encoding="utf-8")
+    assert "Runtime.evaluate" in text
+    for field in ("title", "severity", "primary_type", "subtype", "domain", "editor_text", "validation_errors", "attachment_name", "attachment_size", "agreement_selected"):
+        assert field in text
+    assert all(token not in text for token in (".click(", "Page.navigate", "Input.dispatch", "Runtime.callFunctionOn"))
 
 
 def test_receipt_requires_new_matching_record():
