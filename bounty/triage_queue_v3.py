@@ -18,6 +18,7 @@ def load_candidates(candidate_dir):
         quality = item.get("quality") if isinstance(item.get("quality"), dict) else {}
         decision = review.get("decision")
         ready = decision == "verified" and quality.get("verdict") == "REPORT_READY"
+        resolved = decision == "rejected"
         rows.append({
             "path": path,
             "program": item.get("program_name", ""),
@@ -30,7 +31,7 @@ def load_candidates(candidate_dir):
             "last_seen": item.get("last_seen", ""),
             "review_decision": decision,
             "quality_verdict": quality.get("verdict"),
-            "pending": not ready,
+            "pending": not (ready or resolved),
         })
     return rows
 
