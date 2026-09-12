@@ -105,7 +105,7 @@ jobs:
         run: python bounty/risk_score_v3.py "$FINDING_JSON" "$EVIDENCE_MANIFEST"
 
       - name: Enforce v3 report gate
-        run: python bounty/report_gate_v3.py "$FINDING_JSON"
+        run: python bounty/report_gate_v3.py "$FINDING_JSON" "$EVIDENCE_MANIFEST"
 
       - name: Render report for human submission
         run: python bounty/render_report.py "$FINDING_JSON" bounty/final-report.md
