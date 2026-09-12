@@ -45,7 +45,7 @@ jobs:
           pip install -r bounty/requirements.txt semgrep
 
       - name: Test safety gates
-        run: pytest -q bounty/test_pipeline.py bounty/test_safe_hunter.py bounty/test_pipeline_v3.py bounty/test_runner_v3.py
+        run: pytest -q bounty/test_pipeline.py bounty/test_safe_hunter.py bounty/test_pipeline_v3.py bounty/test_runner_v3.py bounty/test_candidate_migration_v3.py
 
       - name: Run Semgrep
         continue-on-error: true
