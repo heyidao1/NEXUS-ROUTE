@@ -15,6 +15,10 @@ on:
         description: "Repo path to a finding JSON for final report gating"
         required: false
         type: string
+      evidence_manifest:
+        description: "Repo path to evidence manifest JSON for v3 quality gating"
+        required: false
+        type: string
   pull_request:
   push:
     branches:
@@ -41,7 +45,7 @@ jobs:
           pip install -r bounty/requirements.txt semgrep
 
       - name: Test safety gates
-        run: pytest -q bounty/test_pipeline.py bounty/test_safe_hunter.py
+        run: pytest -q bounty/test_pipeline.py bounty/test_safe_hunter.py bounty/test_pipeline_v3.py
 
       - name: Run Semgrep
         continue-on-error: true
@@ -76,12 +80,13 @@ jobs:
           if-no-files-found: warn
 
   submission-gate:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.finding_json != '' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.finding_json != '' && inputs.evidence_manifest != '' }}
     runs-on: ubuntu-latest
     env:
       PROGRAM_ID: ${{ inputs.program_id }}
       TARGET: ${{ inputs.target }}
       FINDING_JSON: ${{ inputs.finding_json }}
+      EVIDENCE_MANIFEST: ${{ inputs.evidence_manifest }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -96,11 +101,11 @@ jobs:
         if: ${{ inputs.program_id != '' && inputs.target != '' }}
         run: python bounty/scope_guard.py --program "$PROGRAM_ID" --target "$TARGET"
 
-      - name: Score candidate conservatively
-        run: python bounty/risk_score.py "$FINDING_JSON"
+      - name: Score candidate with evidence gate
+        run: python bounty/risk_score_v3.py "$FINDING_JSON" "$EVIDENCE_MANIFEST"
 
-      - name: Enforce final report gate
-        run: python bounty/report_gate.py "$FINDING_JSON"
+      - name: Enforce v3 report gate
+        run: python bounty/report_gate_v3.py "$FINDING_JSON"
 
       - name: Render report for human submission
         run: python bounty/render_report.py "$FINDING_JSON" bounty/final-report.md
