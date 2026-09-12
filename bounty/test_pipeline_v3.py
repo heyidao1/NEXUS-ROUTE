@@ -137,9 +137,37 @@ def test_receipt_requires_new_matching_record():
     assert verify_receipt(before, after, "abc")["verified"] is True
 
 
-def test_report_gate_requires_report_ready():
-    data = {"program_id": "p", "target": "a", "title": "t", "vulnerability_type": "v", "impact_fact": "f", "reproduction_steps": ["1", "2"], "scope_proof": "s", "rules_checked_at": "r", "quality_verdict": "REVIEW"}
-    with pytest.raises(SystemExit): validate_report_v3(data)
+def test_report_gate_recomputes_quality_and_blocks_inference_only():
+    data = {
+        "program_id": "p", "target": "a", "title": "t", "vulnerability_type": "v",
+        "impact_fact": "f", "impact_inference": "possible consequence",
+        "reproduction_steps": ["1", "2"], "scope_proof": "s", "rules_checked_at": "r",
+        "in_scope": True, "reproducible": True, "reproduction_count": 2,
+        "human_verified": True, "duplicate_check_complete": True, "severity": "medium",
+        "destructive_test": False, "out_of_scope": False, "quality_verdict": "REPORT_READY",
+    }
+    manifest = {"artifacts": [
+        {"sha256": "a" * 64, "source_url": "https://e/a", "sensitive": False},
+        {"sha256": "b" * 64, "source_url": "https://e/b", "sensitive": False},
+    ]}
+    with pytest.raises(SystemExit, match="quality verdict"):
+        validate_report_v3(data, manifest)
+
+
+def test_report_gate_accepts_demonstrated_report_without_trusting_embedded_flag():
+    data = {
+        "program_id": "p", "target": "a", "title": "t", "vulnerability_type": "v",
+        "impact_fact": "f", "impact_demonstrated": True,
+        "reproduction_steps": ["1", "2"], "scope_proof": "s", "rules_checked_at": "r",
+        "in_scope": True, "reproducible": True, "reproduction_count": 2,
+        "human_verified": True, "duplicate_check_complete": True, "severity": "medium",
+        "destructive_test": False, "out_of_scope": False, "quality_verdict": "HOLD",
+    }
+    manifest = {"artifacts": [
+        {"sha256": "a" * 64, "source_url": "https://e/a", "sensitive": False},
+        {"sha256": "b" * 64, "source_url": "https://e/b", "sensitive": False},
+    ]}
+    assert validate_report_v3(data, manifest)["verdict"] == "REPORT_READY"
 
 
 def test_overnight_mode_excludes_submission_and_enforces_interval():
